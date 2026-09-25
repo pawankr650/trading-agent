@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockPilot · Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 17l5-6 4 3 6-8 3 3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>StockPilot</span><em>NSE · NIFTY 50</em>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Desks">
+    <button role="tab" data-tab="news" aria-selected="true">News Intelligence</button>
+    <button role="tab" data-tab="patterns" aria-selected="false">Pattern Scanner</button>
+    <button role="tab" data-tab="algo" aria-selected="false">Algo Lab</button>
+  </nav>
+  <div class="status">
+    <span id="demoBadge" class="badge warn" hidden title="Live sources unreachable — synthetic prices/headlines for UI testing">DEMO DATA</span>
+    <span id="mkt" class="pill"><i class="dot"></i><span>Market</span></span>
+    <span id="pipe" class="pill mono" title="News pipeline"><i class="dot live"></i><span>starting…</span></span>
+  </div>
+</header>
+<div class="tape" aria-hidden="true"><div class="tape-track" id="tape"></div></div>
+
+<main>
+<!-- ═════════════ DESK 1: NEWS INTELLIGENCE ═════════════ -->
+<section id="desk-news" class="desk" role="tabpanel">
+  <aside class="col wire">
+    <div class="col-head">
+      <h2>Live wire</h2>
+      <span class="sub mono" id="wireCount">0 headlines</span>
+    </div>
+    <div class="chips" id="wireFilter">
+      <button class="chip on" data-f="all">All</button>
+      <button class="chip" data-f="tagged">NIFTY 50</button>
+      <button class="chip" data-f="positive">Positive</button>
+      <button class="chip" data-f="negative">Negative</button>
+    </div>
+    <div class="wire-list" id="wire"><div class="empty">Waiting for the first news cycle…</div></div>
+    <div class="col-foot mono" id="modelFoot">model —</div>
+  </aside>
+
+  <section class="col board">
+    <div class="kpis" id="kpis"></div>
+    <div class="board-head">
+      <h2>Signal board</h2>
+      <div class="seg" id="actFilter">
+        <button class="on" data-a="all">All</button><button data-a="BUY">Buy</button><button data-a="SELL">Sell</button><button data-a="WATCH">Watch</button><button data-a="news">With news</button>
+      </div>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <aside class="col detail" id="detail">
+    <div class="empty tall">Select a stock to see its trade plan, chart and reasons.</div>
+  </aside>
+</section>
+
+<!-- ═════════════ DESK 2: PATTERNS ═════════════ -->
+<section id="desk-patterns" class="desk" role="tabpanel" hidden>
+  <section class="col pscan">
+    <div class="board-head">
+      <h2>NIFTY 50 pattern scanner</h2>
+      <span class="sub mono" id="patEngine"></span>
+      <button class="btn ghost sm" id="patRefresh">Rescan</button>
+    </div>
+    <div class="filters">
+      <label class="field grow"><span>Search</span><input id="patSearch" placeholder="Symbol or company"></label>
+      <label class="field"><span>Bias</span>
+        <select id="patBias"><option value="">All</option><option value="bullish">Bullish</option><option value="bearish">Bearish</option><option value="neutral">Neutral</option></select></label>
+      <label class="field"><span>Sector</span><select id="patSector"><option value="">All sectors</option></select></label>
+    </div>
+    <div class="chips wrap" id="patChips"></div>
+    <div class="ptable" role="table" aria-label="Pattern scan">
+      <div class="prow phead" role="row"><span>Stock</span><span>40-day</span><span class="r">Price</span><span>Bias</span><span>Detected patterns</span></div>
+      <div id="patRows"></div>
+    </div>
+  </section>
+  <aside class="col detail" id="patDetail">
+    <div class="empty tall">Pick a stock to draw its patterns on the chart.</div>
+  </aside>
+</section>
+
+<!-- ═════════════ DESK 3: ALGO LAB ═════════════ -->
+<section id="desk-algo" class="desk" role="tabpanel" hidden>
+  <aside class="col controls">
+    <div class="col-head"><h2>Simulation setup</h2></div>
+    <form id="btForm" class="form">
+      <label class="field"><span>Stock</span><select id="btSym"></select></label>
+      <label class="field"><span>Strategy</span><select id="btStrat"></select></label>
+      <p class="hint" id="btDoc"></p>
+      <div class="row2">
+        <label class="field"><span>History</span>
+          <select id="btYears"><option value="1">1 year</option><option value="2">2 years</option><option value="3" selected>3 years</option><option value="5">5 years</option></select></label>
+        <label class="field"><span>Capital ₹</span><input id="btCash" type="number" value="100000" min="10000" step="10000"></label>
+      </div>
+      <label class="field"><span>Cost per side %</span><input id="btComm" type="number" value="0.12" min="0" max="2" step="0.01"></label>
+      <fieldset class="params"><legend>Parameters</legend><div id="btParams"></div></fieldset>
+      <label class="toggle"><input type="checkbox" id="btOpt"><span>Auto-tune parameters</span><small>grid search on first 70%, scored on unseen last 30%</small></label>
+      <label class="field"><span>Replay speed</span>
+        <select id="btSpeed"><option value="6">Fast</option><option value="2">Normal</option><option value="0">Instant</option></select></label>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="btRun">Run simulation</button>
+        <button type="button" class="btn" id="btRace">Race all strategies</button>
+      </div>
+    </form>
+    <p class="fine">Backtests use <b>backtesting.py</b> on daily bars with next-bar-open fills. Past results don't predict future returns.</p>
+  </aside>
+  <section class="col lab">
+    <div class="kpis" id="btKpis"></div>
+    <div class="panel">
+      <div class="panel-head"><h3 id="btTitle">Price &amp; trades</h3><span class="sub mono" id="btClock"></span></div>
+      <div class="chart" id="btPrice" style="height:300px"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Equity vs buy &amp; hold</h3>
+        <span class="legend"><i style="background:var(--accent)"></i>Strategy <i style="background:var(--muted)"></i>Buy &amp; hold <i style="background:var(--down)"></i>Drawdown</span></div>
+      <div class="chart" id="btEquity" style="height:220px"></div>
+    </div>
+    <div class="split">
+      <div class="panel"><div class="panel-head"><h3>Leaderboard</h3><span class="sub" id="raceSub">run “Race all strategies”</span></div><div id="race" class="tbl"></div></div>
+      <div class="panel"><div class="panel-head"><h3>Trade log</h3><span class="sub mono" id="tradeSub"></span></div><div id="trades" class="tbl scroll"></div></div>
+    </div>
+  </section>
+</section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

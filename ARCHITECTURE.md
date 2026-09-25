@@ -29,7 +29,25 @@ Two systems share one analysis core. Everything is open source and runs on free 
       │ /analyze SYM · /top · /news        │    │ Paper broker  |  OpenAlgo (30+ brokers)│
       └────────────────────────────────────┘    │ /status · /kill · /resume             │
                                                  └────────────────────────────────────────┘
-                     dashboard/app.py (Streamlit): screener · charts · fundamentals · news · P&L
+```
+
+## Web terminal (web/ + core/)
+
+```
+ RSS feeds + rotating Google News ──► news_engine.py (every 120 s, background thread)
+                                        │ hf_nlp.py   FinBERT sentiment · BART-MNLI zero-shot event type
+                                        │             (local transformers → HF Inference API → keywords)
+                                        │ nifty50.py  headline → NIFTY 50 symbols (alias match)
+                                        ▼
+ datastore.py (bulk yfinance, 15-min cache) ──► insights.py  0.45·tech + 0.35·news(time-decayed) + 0.20·patterns
+                                        │                    → BUY/SELL/WATCH/HOLD/AVOID, reasons,
+                                        │                      buy zone (support/ATR), SL (1.5·ATR), T1 (2R), T2
+ patterns.py  TA-Lib CDL* + pivot geometry (scipy) ─┘
+ algo.py      backtesting.py: 7 strategies · run · optimize(70/30) · race
+                                        ▼
+ web/server.py  FastAPI: /api/news · /api/insights · /api/stream (SSE) · /api/stock/{sym}
+                         /api/patterns · /api/strategies · /api/backtest · /api/compare
+ web/static/    one page, vanilla JS + TradingView Lightweight Charts (vendored, Apache-2.0)
 ```
 
 ## Why these open-source pieces
@@ -42,7 +60,12 @@ Two systems share one analysis core. Everything is open source and runs on free 
 | Prices / fundamentals | yfinance | Free, covers NSE (.NS) and BSE (.BO) |
 | News | Public RSS feeds | No keys, no scraping |
 | Alerts | Telegram Bot API | Free, instant, supports images & commands |
-| Dashboard | Streamlit + Plotly | One-file interactive UI |
+| Web API | **FastAPI** + uvicorn | Async, SSE streaming, typed requests |
+| Charts | **TradingView Lightweight Charts** | Fast canvas candlesticks, markers, price lines |
+| News NLP | **Hugging Face** `ProsusAI/finbert`, `facebook/bart-large-mnli` | Finance-tuned sentiment; zero-shot event labels with no training |
+| Candlestick patterns | **TA-Lib** (ta-lib-python) | 61 battle-tested recognisers; binary wheels since 0.6 |
+| Chart patterns | scipy `argrelextrema` + geometry | Transparent rules you can tune |
+| Backtesting | **backtesting.py** | Clean API, realistic next-bar fills, built-in optimiser & stats |
 
 ## Safety design (System 2)
 - **Paper mode by default**; live requires `mode: live` + OpenAlgo key. Test in OpenAlgo Analyzer mode first.

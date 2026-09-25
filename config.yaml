@@ -40,6 +40,24 @@ news:
     - https://www.livemint.com/rss/markets
     - https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml
   google_news_per_symbol: true   # adds "<SYMBOL> share" query from Google News RSS
+  poll_seconds: 120        # web app: how often the live news pipeline polls all feeds
+  stocks_per_cycle: 5      # web app: per-stock Google News queries per cycle (rotates through NIFTY 50)
+
+# Hugging Face models used by the web app's news pipeline.
+#   backend auto → local transformers (pip install transformers torch) → HF Inference API (HF_TOKEN) → keywords
+hf:
+  backend: auto            # auto | local | api | keyword
+  sentiment_model: ProsusAI/finbert          # financial-news sentiment (positive / negative / neutral)
+  event_model: facebook/bart-large-mnli      # zero-shot event type (earnings, M&A, order win, regulatory…)
+  classify_events: true
+
+# Web app per-stock insight = technical + news sentiment + chart/candle patterns
+insights:
+  weights: {technical: 0.45, news: 0.35, pattern: 0.20}
+  buy_threshold: 0.25
+  sell_threshold: -0.25
+  news_half_life_hours: 12  # older headlines count less
+  llm_thesis: true          # 2-sentence thesis from the free-LLM chain for BUY/SELL (needs a key below)
 
 # LLM providers are tried in order; first one with a key (or reachable) wins.
 # All are OpenAI-compatible /chat/completions endpoints with free tiers.

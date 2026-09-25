@@ -6,13 +6,20 @@ pyyaml>=6.0
 python-dotenv>=1.0
 matplotlib>=3.8
 yfinance>=0.2.50
+scipy>=1.11                # swing-pivot detection for chart patterns
+
+# web app (one-page terminal: news intelligence · pattern scanner · algo lab)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+TA-Lib>=0.6                # 61 candlestick recognisers (0.6+ ships binary wheels, no C build)
+backtesting>=0.6           # kernc/backtesting.py — strategy simulation + optimisation
+huggingface_hub>=0.24      # HF Inference API for FinBERT / zero-shot (set HF_TOKEN)
+
+# run the Hugging Face models locally instead of the API (heavier, optional):
+#   pip install transformers torch --extra-index-url https://download.pytorch.org/whl/cpu
 
 # live data / live trading through 30+ Indian brokers (optional)
 openalgo>=2.0
-
-# dashboard (optional)
-streamlit>=1.38
-plotly>=5.24
 
 # optional deep multi-agent analysis (slow, heavy):
 #   git clone https://github.com/TauricResearch/TradingAgents && pip install ./TradingAgents

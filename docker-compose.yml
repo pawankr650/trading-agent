@@ -15,10 +15,10 @@ services:
     volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
     restart: unless-stopped
 
-  dashboard:
+  web:
     build: .
-    command: streamlit run dashboard/app.py --server.address 0.0.0.0
+    command: uvicorn web.server:app --host 0.0.0.0 --port 8000
     env_file: .env
-    ports: ["8501:8501"]
+    ports: ["8000:8000"]
     volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
     restart: unless-stopped
