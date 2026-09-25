@@ -1,0 +1,24 @@
+services:
+  notifier:
+    build: .
+    command: python -m notifier.run
+    env_file: .env
+    environment: [TZ=Asia/Kolkata]
+    volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
+    restart: unless-stopped
+
+  autotrader:
+    build: .
+    command: python -m autotrader.run
+    env_file: .env
+    environment: [TZ=Asia/Kolkata]
+    volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.address 0.0.0.0
+    env_file: .env
+    ports: ["8501:8501"]
+    volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
+    restart: unless-stopped
