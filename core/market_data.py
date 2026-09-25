@@ -29,10 +29,14 @@ def get_history(symbol: str, cfg: dict) -> pd.DataFrame:
         df = df.rename(columns=str.capitalize)
     else:
         import yfinance as yf
-        df = yf.download(yf_ticker(symbol, ex), start=str(start), interval=d.get("interval", "1d"),
-                         progress=False, auto_adjust=True)
+        # Ticker.history is thread-safe; yf.download() shares global state and can mix up symbols
+        # when the scanner runs several stocks in parallel.
+        df = yf.Ticker(yf_ticker(symbol, ex)).history(start=str(start), interval=d.get("interval", "1d"),
+                                                      auto_adjust=True)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
+    if df is None or df.empty or "Close" not in df:
+        raise ValueError(f"No price data for {symbol} (wrong/delisted symbol?)")
     df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
     if df.empty:
         raise ValueError(f"No price data for {symbol}")

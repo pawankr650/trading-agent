@@ -14,7 +14,7 @@ watchlist:            # NSE symbols (use exchange: BSE for BSE codes)
   - LT
   - BHARTIARTL
   - AXISBANK
-  - TATAMOTORS
+  - TMPV            # Tata Motors Passenger Vehicles (TATAMOTORS was delisted after the Oct-2025 demerger)
   - SUNPHARMA
 
 exchange: NSE         # NSE or BSE (yfinance suffix .NS / .BO)
@@ -42,26 +42,72 @@ news:
   google_news_per_symbol: true   # adds "<SYMBOL> share" query from Google News RSS
 
 # LLM providers are tried in order; first one with a key (or reachable) wins.
-# All are OpenAI-compatible /chat/completions endpoints with free tiers.
+# All are OpenAI-compatible /chat/completions endpoints with free tiers, serving OPEN-SOURCE models
+# (Llama, gpt-oss, Qwen, DeepSeek). Override any model without editing this file via its *_MODEL env var.
+# A provider that fails (bad key / wrong model / offline) is skipped for `failure_cooldown_minutes`,
+# and the provider's own error text is logged so you can see what to fix.
 llm:
   enabled: true
+  temperature: 0.1
+  timeout_seconds: 60
+  failure_cooldown_minutes: 15
   providers:
-    - name: groq
+    - name: groq                # console.groq.com — fastest, generous free tier
       base_url: https://api.groq.com/openai/v1
       model: llama-3.3-70b-versatile
+      model_env: GROQ_MODEL     # e.g. openai/gpt-oss-120b, qwen/qwen3-32b
       api_key_env: GROQ_API_KEY
-    - name: gemini
-      base_url: https://generativelanguage.googleapis.com/v1beta/openai
-      model: gemini-2.5-flash
-      api_key_env: GEMINI_API_KEY
-    - name: openrouter
+    - name: cerebras            # cloud.cerebras.ai — free tier
+      base_url: https://api.cerebras.ai/v1
+      model: llama-3.3-70b
+      model_env: CEREBRAS_MODEL
+      api_key_env: CEREBRAS_API_KEY
+    - name: huggingface         # huggingface.co/settings/tokens — free monthly credits
+      base_url: https://router.huggingface.co/v1
+      model: meta-llama/Llama-3.3-70B-Instruct
+      model_env: HF_MODEL
+      api_key_env: HF_TOKEN
+    - name: openrouter          # openrouter.ai/keys — ":free" models
       base_url: https://openrouter.ai/api/v1
       model: meta-llama/llama-3.3-70b-instruct:free
+      model_env: OPENROUTER_MODEL
       api_key_env: OPENROUTER_API_KEY
-    - name: ollama            # fully local + free, no key
+    - name: ollama              # fully local + free, no key (ollama pull llama3.1)
       base_url: http://localhost:11434/v1
       model: llama3.1
+      model_env: OLLAMA_MODEL
       api_key_env: ""
+    - name: gemini              # optional, not open-source (last resort)
+      base_url: https://generativelanguage.googleapis.com/v1beta/openai
+      model: gemini-2.5-flash
+      model_env: GEMINI_MODEL
+      api_key_env: GEMINI_API_KEY
+
+# ── AI news scanner: "should I buy this stock?" from the news ──
+news_scanner:
+  enabled: true
+  every_minutes: 30           # how often to scan for new news
+  active_from: "07:30"        # IST window in which scheduled scans run
+  active_to: "22:00"
+  weekends: false
+  nse_announcements: true     # NSE corporate filings (order wins, results, dividends, M&A, penalties…)
+  bse_announcements: true     # BSE corporate filings
+  announcement_hours: 24
+  google_news_queries:        # extra Google News searches (any source)
+    - NSE stock order win
+    - Indian stocks results today
+    - Sensex Nifty market news
+  max_market_items: 80
+  max_items_per_run: 40       # newest + most important items sent to the LLM per scan
+  llm_batch_size: 12
+  llm_max_tokens: 4000
+  confirm_with_technicals: true   # run chart + fundamental check on each BUY/WATCH stock
+  max_technical_checks: 8
+  min_tech_score_for_buy: -0.2    # news BUY on a falling chart -> downgraded to WATCH
+  min_confidence: 0.55        # Telegram alert only when a BUY/SELL/AVOID is at least this confident
+  send_watch_only_digests: false
+  max_cards: 12
+  remember_items: 3000        # already-analysed items are not re-sent
 
 # ── System 1: notifications ──────────────────────────────────
 notifier:
@@ -94,3 +140,9 @@ market:
   open: "09:15"
   close: "15:30"
   holidays: []              # add NSE holidays as "YYYY-MM-DD"
+
+# ── Web app (python -m server.app) ───────────────────────────
+server:
+  host: 127.0.0.1             # 0.0.0.0 to expose on your network (then set APP_TOKEN in .env!)
+  port: 8000
+  background_jobs: true       # refresh the AI news digest on schedule inside the web app

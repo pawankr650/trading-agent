@@ -1,5 +1,14 @@
 services:
-  notifier:
+  web:                      # React UI + REST API  ->  http://localhost:8000
+    build: .
+    command: python -m server.app
+    env_file: .env
+    environment: [TZ=Asia/Kolkata, HOST=0.0.0.0]
+    ports: ["127.0.0.1:8000:8000"]   # drop "127.0.0.1:" to expose on your network (set APP_TOKEN first!)
+    volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
+    restart: unless-stopped
+
+  notifier:                 # System 1: Telegram alerts + AI news digests
     build: .
     command: python -m notifier.run
     env_file: .env
@@ -7,18 +16,10 @@ services:
     volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
     restart: unless-stopped
 
-  autotrader:
+  autotrader:               # System 2: paper / live trading
     build: .
     command: python -m autotrader.run
     env_file: .env
     environment: [TZ=Asia/Kolkata]
-    volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
-    restart: unless-stopped
-
-  dashboard:
-    build: .
-    command: streamlit run dashboard/app.py --server.address 0.0.0.0
-    env_file: .env
-    ports: ["8501:8501"]
     volumes: [./data:/app/data, ./config.yaml:/app/config.yaml]
     restart: unless-stopped

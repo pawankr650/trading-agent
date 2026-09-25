@@ -1,12 +1,12 @@
 # StockPilot — Architecture
 
-Two systems share one analysis core. Everything is open source and runs on free tiers.
+A web app and two background systems share one analysis core. Everything is open source and runs on free tiers.
 
 ```
                 ┌────────────────────── DATA LAYER (free) ───────────────────────┐
                 │ yfinance (.NS/.BO OHLCV + fundamentals)   OpenAlgo (live quotes) │
-                │ RSS: ET · Moneycontrol · Business Std · Mint · NSE announcements │
-                │ Google News RSS per stock                                        │
+                │ RSS: ET · Moneycontrol · Business Std · Mint · Google News       │
+                │ NSE + BSE corporate filings (order wins, results, M&A, …)        │
                 └───────────────────────────────┬──────────────────────────────────┘
                                                 │
                 ┌────────────────────── CORE (core/) ────────────────────────────┐
@@ -16,7 +16,8 @@ Two systems share one analysis core. Everything is open source and runs on free 
                 │ news.py + llm.py  headlines → sentiment (LLM, keyword fallback) │
                 │ analysis.py  0.50·tech + 0.25·fund + 0.25·news → BUY/SELL/HOLD  │
                 │              + ATR trade plan (entry · stop · target, 1:2 R:R)  │
-                │ llm.py   Groq → Gemini → OpenRouter → Ollama (auto-fallback)    │
+                │ news_scanner.py  news+filings → LLM → BUY/WATCH/AVOID + reasons │
+                │ llm.py   Groq → Cerebras → HF → OpenRouter → Ollama (open-src)  │
                 └───────────────┬──────────────────────────────┬─────────────────┘
                                 │                              │
       ┌──────── SYSTEM 1: notifier/ ───────┐    ┌──────── SYSTEM 2: autotrader/ ─────────┐
@@ -29,7 +30,8 @@ Two systems share one analysis core. Everything is open source and runs on free 
       │ /analyze SYM · /top · /news        │    │ Paper broker  |  OpenAlgo (30+ brokers)│
       └────────────────────────────────────┘    │ /status · /kill · /resume             │
                                                  └────────────────────────────────────────┘
-                     dashboard/app.py (Streamlit): screener · charts · fundamentals · news · P&L
+   WEB APP: server/app.py (FastAPI REST, /docs)  +  frontend/ (React + TypeScript, Vite)
+            Overview · AI News · Screener · Stock charts · Headlines & Filings · Auto-trader · Settings
 ```
 
 ## Why these open-source pieces
@@ -42,7 +44,8 @@ Two systems share one analysis core. Everything is open source and runs on free 
 | Prices / fundamentals | yfinance | Free, covers NSE (.NS) and BSE (.BO) |
 | News | Public RSS feeds | No keys, no scraping |
 | Alerts | Telegram Bot API | Free, instant, supports images & commands |
-| Dashboard | Streamlit + Plotly | One-file interactive UI |
+| Web app | FastAPI + React/TypeScript (Vite) + lightweight-charts | Typed API, fast UI, one process serves both |
+| News LLM | Open-weight models (Llama, gpt-oss, Qwen, DeepSeek) via OpenAI-compatible APIs | Free tiers, swap models via env vars |
 
 ## Safety design (System 2)
 - **Paper mode by default**; live requires `mode: live` + OpenAlgo key. Test in OpenAlgo Analyzer mode first.

@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
+from html import unescape
 from urllib.parse import quote_plus
 
 import requests
@@ -44,14 +45,23 @@ def _fetch_feed(url: str, _bucket: int) -> tuple:
         log.debug("feed %s failed: %s", url, e)
         return ()
     items = []
+    source = re.sub(r"^https?://(www\.)?", "", url).split("/")[0]
     for it in root.iter("item"):
+        title = (it.findtext("title") or "").strip()
+        if not title:
+            continue
         items.append({
-            "title": (it.findtext("title") or "").strip(),
+            "title": title,
             "link": (it.findtext("link") or "").strip(),
             "published": _parse_date(it.findtext("pubDate")),
-            "source": re.sub(r"^https?://(www\.)?", "", url).split("/")[0],
+            "source": source,
+            "summary": _strip_html(it.findtext("description") or "")[:500],
         })
     return tuple(items)
+
+
+def _strip_html(s: str) -> str:
+    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", s))).strip()
 
 
 def _bucket() -> int:
@@ -63,9 +73,9 @@ def market_news(cfg: dict, limit: int = 30) -> list[dict]:
     out, seen = [], set()
     for url in cfg["news"]["feeds"]:
         for it in _fetch_feed(url, _bucket()):
-            if it["title"] in seen or (it["published"] and it["published"] < cutoff):
+            if it["title"].lower() in seen or (it["published"] and it["published"] < cutoff):
                 continue
-            seen.add(it["title"]); out.append(it)
+            seen.add(it["title"].lower()); out.append(it)
     out.sort(key=lambda x: x["published"] or cutoff, reverse=True)
     return out[:limit]
 
@@ -74,7 +84,9 @@ def stock_news(symbol: str, cfg: dict, company: str | None = None, limit: int = 
     keys = {symbol.lower()}
     if company:
         keys.add(company.lower().replace(" limited", "").replace(" ltd", "").strip())
-    hits = [n for n in market_news(cfg, limit=300) if any(k in n["title"].lower() for k in keys)]
+    # word-boundary match: "LT" must not match "result", "ITC" must not match "pitch"
+    pat = re.compile(r"\b(" + "|".join(re.escape(k) for k in keys if k) + r")\b", re.I)
+    hits = [n for n in market_news(cfg, limit=300) if pat.search(n["title"])]
     if cfg["news"].get("google_news_per_symbol", True):
         q = quote_plus(f"{company or symbol} share NSE")
         url = f"https://news.google.com/rss/search?q={q}&hl=en-IN&gl=IN&ceid=IN:en"

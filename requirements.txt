@@ -1,16 +1,21 @@
-# core (both systems)
+# core (all systems)
 pandas>=2.2
 numpy>=1.26
 requests>=2.31
 pyyaml>=6.0
 python-dotenv>=1.0
 matplotlib>=3.8
-yfinance>=0.2.50
+yfinance>=0.2.60        # older versions fail with "Invalid Crumb" (HTTP 401) from Yahoo
+
+# web app backend (python -m server.app)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27             # used by the API tests (fastapi.testclient)
 
 # live data / live trading through 30+ Indian brokers (optional)
 openalgo>=2.0
 
-# dashboard (optional)
+# legacy Streamlit dashboard (optional — the React web app replaces it)
 streamlit>=1.38
 plotly>=5.24
 

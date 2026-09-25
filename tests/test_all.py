@@ -16,7 +16,7 @@ from core.indicators import add_indicators, rsi, technical_score
 from core.news import keyword_sentiment
 from notifier.formatter import board_message, signal_message
 
-CFG = load_config()
+CFG = load_config(overrides=False)
 CFG["autotrader"]["no_new_entries_after"] = "23:59"
 CFG["autotrader"]["mis_square_off"] = "23:59"
 

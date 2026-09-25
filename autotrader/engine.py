@@ -134,6 +134,9 @@ class AutoTrader:
         shift = fill - plan["entry"]  # keep the planned risk distance around the real fill
         stop, target = round(plan["stop"] + shift, 2), round(plan["target"] + shift, 2)
         sl = self._order(r["symbol"], "SELL" if side == "BUY" else "BUY", qty, price_type="SL-M", trigger_price=stop)
+        if sl.get("status") != "success":  # position is live but unprotected at the broker — shout
+            self.tg.send(f"⚠️ <b>{r['symbol']}</b>: protective SL-M order FAILED ({sl}). "
+                         f"Bot will still exit at {stop}, but place a stop manually if it may go offline.")
         self.journal.add(mode=self.broker.mode, symbol=r["symbol"], side=side, qty=qty, entry=fill, stop=stop,
                          target=target, sl_order_id=sl.get("orderid"),
                          reason_in=f"score {r['score']:+.2f}; " + "; ".join(r["criteria"][:4]))
