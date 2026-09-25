@@ -1,0 +1,96 @@
+# ─────────────────────────────────────────────────────────────
+# StockPilot configuration (NSE / BSE)
+# Secrets (API keys, tokens) go in .env — never in this file.
+# ─────────────────────────────────────────────────────────────
+
+watchlist:            # NSE symbols (use exchange: BSE for BSE codes)
+  - RELIANCE
+  - TCS
+  - HDFCBANK
+  - INFY
+  - ICICIBANK
+  - SBIN
+  - ITC
+  - LT
+  - BHARTIARTL
+  - AXISBANK
+  - TATAMOTORS
+  - SUNPHARMA
+
+exchange: NSE         # NSE or BSE (yfinance suffix .NS / .BO)
+
+data:
+  source: yfinance    # yfinance (free, delayed) | openalgo (live, via your broker)
+  interval: 1d        # 1d for swing; 15m / 5m for intraday
+  lookback_days: 400  # need >200 bars for SMA200
+
+scoring:
+  weights: {technical: 0.50, fundamental: 0.25, news: 0.25}
+  buy_threshold: 0.35     # combined score is in [-1, +1]
+  sell_threshold: -0.35
+  stop_atr_mult: 1.5      # stop-loss = entry -/+ 1.5 x ATR(14)
+  reward_risk: 2.0        # target = entry +/- 2 x risk
+
+news:
+  max_age_hours: 36
+  feeds:                  # public RSS feeds (Indian markets)
+    - https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms
+    - https://www.moneycontrol.com/rss/marketreports.xml
+    - https://www.business-standard.com/rss/markets-106.rss
+    - https://www.livemint.com/rss/markets
+    - https://nsearchives.nseindia.com/content/RSS/Online_announcements.xml
+  google_news_per_symbol: true   # adds "<SYMBOL> share" query from Google News RSS
+
+# LLM providers are tried in order; first one with a key (or reachable) wins.
+# All are OpenAI-compatible /chat/completions endpoints with free tiers.
+llm:
+  enabled: true
+  providers:
+    - name: groq
+      base_url: https://api.groq.com/openai/v1
+      model: llama-3.3-70b-versatile
+      api_key_env: GROQ_API_KEY
+    - name: gemini
+      base_url: https://generativelanguage.googleapis.com/v1beta/openai
+      model: gemini-2.5-flash
+      api_key_env: GEMINI_API_KEY
+    - name: openrouter
+      base_url: https://openrouter.ai/api/v1
+      model: meta-llama/llama-3.3-70b-instruct:free
+      api_key_env: OPENROUTER_API_KEY
+    - name: ollama            # fully local + free, no key
+      base_url: http://localhost:11434/v1
+      model: llama3.1
+      api_key_env: ""
+
+# ── System 1: notifications ──────────────────────────────────
+notifier:
+  scan_every_minutes: 15
+  premarket_brief: "08:45"
+  eod_report: "15:45"
+  send_charts: true
+  only_on_change: true      # alert only when BUY/SELL/HOLD flips for a stock
+  min_confidence: 0.35      # |combined score| needed to alert
+
+# ── System 2: auto-trading ───────────────────────────────────
+autotrader:
+  mode: paper               # paper | live   (live requires OpenAlgo + broker)
+  capital: 100000           # INR allocated to the bot
+  product: CNC              # CNC (delivery) | MIS (intraday, auto square-off)
+  risk_per_trade_pct: 1.0   # max loss per trade as % of capital
+  max_position_pct: 20      # max capital in one stock
+  max_open_positions: 5
+  max_daily_loss_pct: 2.0   # kill-switch: stop new entries for the day
+  max_orders_per_second: 5  # SEBI cap is 10/s — stay well below
+  no_new_entries_after: "14:45"
+  mis_square_off: "15:10"
+  allow_short: false        # shorting only valid for MIS
+  llm_confirm: true         # LLM must agree before any entry
+  tradingagents_confirm: false  # optional deep multi-agent check (slow)
+  loop_every_minutes: 5
+
+market:
+  timezone: Asia/Kolkata
+  open: "09:15"
+  close: "15:30"
+  holidays: []              # add NSE holidays as "YYYY-MM-DD"
