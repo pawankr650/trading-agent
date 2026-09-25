@@ -102,5 +102,33 @@ class Algo(unittest.TestCase):
         self.assertEqual(len(algo.compare(df)), len(algo.STRATEGIES))
 
 
+class TerminalAPI(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from fastapi.testclient import TestClient
+        from server import app as srv
+        cls.c = TestClient(srv.app)  # no context manager → lifespan (live news engine) stays off
+
+    def test_page_and_static(self):
+        r = self.c.get("/")
+        self.assertEqual(r.status_code, 200); self.assertIn("StockPilot", r.text)
+        self.assertEqual(self.c.get("/static/app.js").status_code, 200)
+
+    def test_stock_patterns_backtest(self):
+        self.assertEqual(len(self.c.get("/api/terminal/strategies").json()), len(algo.STRATEGIES))
+        d = self.c.get("/api/terminal/stock/M&M").json()
+        self.assertTrue(d["candles"]); self.assertIn("levels", d["patterns"])
+        self.assertEqual(self.c.get("/api/terminal/stock/NOPE").status_code, 404)
+        r = self.c.post("/api/terminal/backtest", json={"symbol": "TCS", "strategy": "donchian", "years": 2}).json()
+        self.assertEqual(len(r["candles"]), len(r["equity"]))
+        self.assertEqual(self.c.post("/api/terminal/backtest", json={"symbol": "TCS", "strategy": "x"}).status_code, 400)
+
+    def test_token_required(self):
+        from unittest import mock
+        with mock.patch.dict("os.environ", {"APP_TOKEN": "s3cret"}):
+            self.assertEqual(self.c.get("/api/terminal/strategies").status_code, 401)
+            self.assertEqual(self.c.get("/api/terminal/strategies?token=s3cret").status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()

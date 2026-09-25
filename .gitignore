@@ -1,6 +1,22 @@
-__pycache__/
-*.pyc
+# secrets
 .env
+
+# python
+__pycache__/
+*.py[cod]
 .venv/
-data/charts/
-data/web.log
+venv/
+.pytest_cache/
+
+# runtime data (logs, journal, state, charts) — keep the folder, not the contents
+data/*
+!data/.gitkeep
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store

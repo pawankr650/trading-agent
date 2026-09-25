@@ -19,8 +19,26 @@ const pct = (v, d = 2) => v == null ? "—" : (v > 0 ? "+" : "") + Number(v).toF
 const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
 const ago = t => { const s = Date.now() / 1000 - t; return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`; };
 const biasOf = s => ({ positive: "bullish", negative: "bearish" }[s] || s);
-async function api(path, body) {
-  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+// APP_TOKEN support: open the page once as /?token=… (remembered), or enter it when the server asks.
+let TOKEN = null;
+try { TOKEN = localStorage.getItem("sp.token"); } catch (e) { /* storage blocked */ }
+const urlToken = new URLSearchParams(location.search).get("token");
+if (urlToken) {
+  TOKEN = urlToken;
+  try { localStorage.setItem("sp.token", TOKEN); } catch (e) { /* storage blocked */ }
+  history.replaceState(null, "", location.pathname);
+}
+async function api(path, body, retried) {
+  const headers = { ...(body ? { "Content-Type": "application/json" } : {}), ...(TOKEN ? { "X-App-Token": TOKEN } : {}) };
+  const r = await fetch(path, body ? { method: "POST", headers, body: JSON.stringify(body) } : { headers });
+  if (r.status === 401 && !retried) {
+    const t = prompt("This StockPilot server is protected. Enter its APP_TOKEN:");
+    if (t) {
+      TOKEN = t.trim();
+      try { localStorage.setItem("sp.token", TOKEN); } catch (e) { /* storage blocked */ }
+      return api(path, body, true);
+    }
+  }
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 }
@@ -61,7 +79,7 @@ function setTab(t) {
 // ── status + tape ──────────────────────────────────────────
 async function loadStatus() {
   try {
-    const s = await api("/api/status");
+    const s = await api("/api/terminal/status");
     $("#demoBadge").hidden = !s.demo;
     $("#mkt").innerHTML = `<i class="dot ${s.market_open ? "on" : ""}"></i><span>${s.market_open ? "Market open" : "Market closed"} · ${esc(s.ist)} IST</span>`;
     const e = s.engine;
@@ -171,7 +189,7 @@ async function selectStock(sym) {
   const el = $("#detail");
   el.innerHTML = `<div class="empty tall"><span class="spin"></span> Loading ${esc(sym)}…</div>`;
   let d;
-  try { d = await api("/api/stock/" + encodeURIComponent(sym)); } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  try { d = await api("/api/terminal/stock/" + encodeURIComponent(sym)); } catch (e) { el.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   if (S.sel !== sym) return;
   const i = d.insight || {};
   const p = i.plan;
@@ -235,13 +253,13 @@ function onInsight(i) {
   if (S.sel === i.symbol) selectStock(i.symbol);
 }
 function connectStream() {
-  const es = new EventSource("/api/stream");
+  const es = new EventSource("/api/terminal/stream" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : ""));
   es.addEventListener("news", e => onNews(JSON.parse(e.data)));
   es.addEventListener("insight", e => onInsight(JSON.parse(e.data)));
   es.onerror = () => { es.close(); setTimeout(connectStream, 5000); };
 }
 async function loadNewsDesk() {
-  const [news, ins] = await Promise.all([api("/api/news?limit=300"), api("/api/insights")]);
+  const [news, ins] = await Promise.all([api("/api/terminal/news?limit=300"), api("/api/terminal/insights")]);
   S.news = news; S.insights = Object.fromEntries(ins.map(i => [i.symbol, i]));
   renderWire(); renderCards();
   if (!ins.length) setTimeout(loadNewsDesk, 4000);
@@ -250,7 +268,7 @@ async function loadNewsDesk() {
 // ═════════════ DESK 2: PATTERNS ═════════════
 async function loadPatterns(refresh = false) {
   $("#patRows").innerHTML = `<div class="empty"><span class="spin"></span> Scanning 50 stocks…</div>`;
-  applyPatterns(await api("/api/patterns" + (refresh ? "?refresh=true" : "")));
+  applyPatterns(await api("/api/terminal/patterns" + (refresh ? "?refresh=true" : "")));
 }
 function applyPatterns(d) {
   S.patterns = d.rows;
@@ -290,7 +308,7 @@ async function selectPattern(sym) {
   $$(".prow").forEach(r => r.classList.toggle("sel", r.dataset.sym === sym));
   const el = $("#patDetail");
   el.innerHTML = `<div class="empty tall"><span class="spin"></span></div>`;
-  const d = await api("/api/stock/" + encodeURIComponent(sym) + "?bars=180");
+  const d = await api("/api/terminal/stock/" + encodeURIComponent(sym) + "?bars=180");
   const P = d.patterns, first = d.candles[0].time;
   const charts = P.chart.filter(p => !p.points.length || p.points.at(-1).time >= first);
   const candles = P.candlestick.filter(p => p.time >= first);
@@ -340,8 +358,8 @@ async function selectPattern(sym) {
 
 // ═════════════ DESK 3: ALGO LAB ═════════════
 async function initAlgo() {
-  S.strategies = await api("/api/strategies");
-  if (!S.patterns.length) applyPatterns(await api("/api/patterns"));
+  S.strategies = await api("/api/terminal/strategies");
+  if (!S.patterns.length) applyPatterns(await api("/api/terminal/patterns"));
   const syms = S.patterns;
   $("#btSym").innerHTML = syms.map(r => `<option value="${r.symbol}">${r.symbol} · ${esc(r.name)}</option>`).join("");
   $("#btSym").value = syms.find(r => r.symbol === "RELIANCE") ? "RELIANCE" : syms[0].symbol;
@@ -370,7 +388,7 @@ function req() {
 async function runBacktest() {
   const b = $("#btRun"); b.disabled = true; b.innerHTML = '<span class="spin"></span> Simulating…';
   try {
-    const r = await api("/api/backtest", req());
+    const r = await api("/api/terminal/backtest", req());
     S.bt = r;
     if (r.optimized) { renderParams(r.params); toast("Auto-tuned: " + Object.entries(r.params).map(([k, v]) => `${k}=${v}`).join(", ")); }
     playBacktest(r);
@@ -436,7 +454,7 @@ function playBacktest(r) {
 async function runRace() {
   const b = $("#btRace"); b.disabled = true; b.innerHTML = '<span class="spin"></span> Racing 7 strategies…';
   try {
-    const rows = await api("/api/compare", req());
+    const rows = await api("/api/terminal/compare", req());
     const best = rows.find(r => !r.error);
     $("#raceSub").textContent = `${$("#btSym").value} · ranked by Sharpe`;
     $("#race").innerHTML = `<table><thead><tr><th>Strategy</th><th class="r">Return</th><th class="r">Sharpe</th><th class="r">Max DD</th><th class="r">Win</th><th class="r">Trades</th><th></th></tr></thead><tbody>
@@ -457,7 +475,7 @@ $("#race").onclick = e => {
   loadStatus(); setInterval(loadStatus, 20000);
   connectStream();
   loadNewsDesk().catch(e => toast(e.message));
-  api("/api/patterns").then(applyPatterns).catch(() => {});
+  api("/api/terminal/patterns").then(applyPatterns).catch(() => {});
   setInterval(() => $$("#wire .news .meta span:first-child").forEach((s, i) => { const n = S.news.filter(wireFilter)[i]; if (n) s.textContent = ago(n.ts); }), 30000);
   let t = "news"; try { t = localStorage.getItem("sp.tab") || "news"; } catch (e) { /* storage blocked */ }
   setTab(t);

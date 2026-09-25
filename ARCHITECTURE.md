@@ -1,12 +1,12 @@
 # StockPilot — Architecture
 
-Two systems share one analysis core. Everything is open source and runs on free tiers.
+A web app and two background systems share one analysis core. Everything is open source and runs on free tiers.
 
 ```
                 ┌────────────────────── DATA LAYER (free) ───────────────────────┐
                 │ yfinance (.NS/.BO OHLCV + fundamentals)   OpenAlgo (live quotes) │
-                │ RSS: ET · Moneycontrol · Business Std · Mint · NSE announcements │
-                │ Google News RSS per stock                                        │
+                │ RSS: ET · Moneycontrol · Business Std · Mint · Google News       │
+                │ NSE + BSE corporate filings (order wins, results, M&A, …)        │
                 └───────────────────────────────┬──────────────────────────────────┘
                                                 │
                 ┌────────────────────── CORE (core/) ────────────────────────────┐
@@ -16,7 +16,8 @@ Two systems share one analysis core. Everything is open source and runs on free 
                 │ news.py + llm.py  headlines → sentiment (LLM, keyword fallback) │
                 │ analysis.py  0.50·tech + 0.25·fund + 0.25·news → BUY/SELL/HOLD  │
                 │              + ATR trade plan (entry · stop · target, 1:2 R:R)  │
-                │ llm.py   Groq → Gemini → OpenRouter → Ollama (auto-fallback)    │
+                │ news_scanner.py  news+filings → LLM → BUY/WATCH/AVOID + reasons │
+                │ llm.py   Groq → Cerebras → HF → OpenRouter → Ollama (open-src)  │
                 └───────────────┬──────────────────────────────┬─────────────────┘
                                 │                              │
       ┌──────── SYSTEM 1: notifier/ ───────┐    ┌──────── SYSTEM 2: autotrader/ ─────────┐
@@ -29,9 +30,11 @@ Two systems share one analysis core. Everything is open source and runs on free 
       │ /analyze SYM · /top · /news        │    │ Paper broker  |  OpenAlgo (30+ brokers)│
       └────────────────────────────────────┘    │ /status · /kill · /resume             │
                                                  └────────────────────────────────────────┘
+   WEB APP: server/app.py (FastAPI REST, /docs)  +  web/static/ (one page, no build step)
+            News Intelligence · Pattern Scanner · Algo Lab
 ```
 
-## Web terminal (web/ + core/)
+## Web terminal (server/terminal.py → /api/terminal/*)
 
 ```
  RSS feeds + rotating Google News ──► news_engine.py (every 120 s, background thread)
@@ -43,11 +46,10 @@ Two systems share one analysis core. Everything is open source and runs on free 
                                         │                    → BUY/SELL/WATCH/HOLD/AVOID, reasons,
                                         │                      buy zone (support/ATR), SL (1.5·ATR), T1 (2R), T2
  patterns.py  TA-Lib CDL* + pivot geometry (scipy) ─┘
- algo.py      backtesting.py: 7 strategies · run · optimize(70/30) · race
+ algo.py      backtesting.py: 7 strategies · run · optimize (70/30 walk-forward) · race
                                         ▼
- web/server.py  FastAPI: /api/news · /api/insights · /api/stream (SSE) · /api/stock/{sym}
-                         /api/patterns · /api/strategies · /api/backtest · /api/compare
- web/static/    one page, vanilla JS + TradingView Lightweight Charts (vendored, Apache-2.0)
+ /status · /news · /insights · /stream (SSE) · /stock/{sym} · /patterns · /strategies · /backtest · /compare
+ web/static/  vanilla JS + TradingView Lightweight Charts (vendored, Apache-2.0)
 ```
 
 ## Why these open-source pieces
@@ -59,13 +61,15 @@ Two systems share one analysis core. Everything is open source and runs on free 
 | Free LLMs | Groq, Google AI Studio (Gemini), OpenRouter `:free` models, Ollama | All OpenAI-compatible, no card needed; chain falls back on rate-limit |
 | Prices / fundamentals | yfinance | Free, covers NSE (.NS) and BSE (.BO) |
 | News | Public RSS feeds | No keys, no scraping |
-| Alerts | Telegram Bot API | Free, instant, supports images & commands |
-| Web API | **FastAPI** + uvicorn | Async, SSE streaming, typed requests |
+| Web API | **FastAPI** + uvicorn | Async, SSE streaming, typed requests, /docs |
 | Charts | **TradingView Lightweight Charts** | Fast canvas candlesticks, markers, price lines |
 | News NLP | **Hugging Face** `ProsusAI/finbert`, `facebook/bart-large-mnli` | Finance-tuned sentiment; zero-shot event labels with no training |
 | Candlestick patterns | **TA-Lib** (ta-lib-python) | 61 battle-tested recognisers; binary wheels since 0.6 |
 | Chart patterns | scipy `argrelextrema` + geometry | Transparent rules you can tune |
 | Backtesting | **backtesting.py** | Clean API, realistic next-bar fills, built-in optimiser & stats |
+| Alerts | Telegram Bot API | Free, instant, supports images & commands |
+| Web app | FastAPI + React/TypeScript (Vite) + lightweight-charts | Typed API, fast UI, one process serves both |
+| News LLM | Open-weight models (Llama, gpt-oss, Qwen, DeepSeek) via OpenAI-compatible APIs | Free tiers, swap models via env vars |
 
 ## Safety design (System 2)
 - **Paper mode by default**; live requires `mode: live` + OpenAlgo key. Test in OpenAlgo Analyzer mode first.

@@ -57,7 +57,7 @@ def analyze(symbol: str, cfg: dict, llm: LLM | None = None, df: pd.DataFrame | N
     last = df.iloc[-1]
     report = {
         "symbol": symbol, "price": round(float(last.Close), 2),
-        "change_pct": round(float((last.Close / df.iloc[-2].Close - 1) * 100), 2),
+        "change_pct": round(float((last.Close / df.iloc[-2].Close - 1) * 100), 2) if len(df) > 1 else 0.0,
         "action": action, "score": round(score, 3),
         "tech_score": round(tech, 3), "fund_score": round(fund, 3), "news_score": round(ns, 3), "news_src": news_src,
         "criteria": tech_why + fund_why, "fundamentals": f, "news": items,

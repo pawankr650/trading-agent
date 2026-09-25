@@ -1,53 +1,37 @@
-"""StockPilot web app — one page, three desks: News Intelligence · NIFTY 50 Patterns · Algo Lab.
+"""Terminal API behind the one-page UI (web/static): News Intelligence · NIFTY 50 Patterns · Algo Lab.
 
-Run:  uvicorn web.server:app --port 8000     (or: python -m web.server)
-      STOCKPILOT_DEMO=1 uvicorn web.server:app   → offline demo data (synthetic, badged in the UI)
+Mounted by server/app.py under /api/terminal. STOCKPILOT_DEMO=1 → offline synthetic data (badged in the UI).
 """
 from __future__ import annotations
 
 import asyncio
 import json
-import sys
+import logging
 import time
-from contextlib import asynccontextmanager
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import pandas as pd
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
-import pandas as pd  # noqa: E402
-from fastapi import FastAPI, HTTPException  # noqa: E402
-from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
-from fastapi.staticfiles import StaticFiles  # noqa: E402
-from pydantic import BaseModel, Field  # noqa: E402
+from core import algo, demo
+from core.config import load_config
+from core.datastore import PriceStore
+from core.indicators import add_indicators
+from core.llm import LLM
+from core.market_hours import is_market_open, now_ist
+from core.news_engine import NewsEngine
+from core.nifty50 import NIFTY50, SYMBOLS, name, sector
+from core.patterns import HAS_TALIB, detect, ts
 
-from core import algo, demo  # noqa: E402
-from core.config import load_config, setup_logging  # noqa: E402
-from core.datastore import PriceStore  # noqa: E402
-from core.indicators import add_indicators  # noqa: E402
-from core.llm import LLM  # noqa: E402
-from core.market_hours import is_market_open, now_ist  # noqa: E402
-from core.news_engine import NewsEngine  # noqa: E402
-from core.nifty50 import NIFTY50, SYMBOLS, name, sector  # noqa: E402
-from core.patterns import HAS_TALIB, detect, ts  # noqa: E402
-
-log = setup_logging("web")
-STATIC = Path(__file__).resolve().parent / "static"
+log = logging.getLogger("server.terminal")
 cfg = load_config()
 prices = PriceStore(cfg)
-llm = LLM(cfg) if cfg.get("insights", {}).get("llm_thesis", True) and cfg.get("llm", {}).get("enabled") else None
+_llm = LLM(cfg)
+llm = _llm if cfg.get("insights", {}).get("llm_thesis", True) and _llm.enabled and _llm.available() else None
 engine = NewsEngine(cfg, prices, llm)
 _pattern_cache: dict = {"at": 0.0, "rows": []}
-
-
-@asynccontextmanager
-async def lifespan(_app):
-    engine.start()
-    yield
-    engine.stop()
-
-
-app = FastAPI(title="StockPilot", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
 
 def _sym(symbol: str) -> str:
@@ -70,13 +54,7 @@ def _candles(df: pd.DataFrame, bars: int) -> dict:
     }
 
 
-# ── pages ──────────────────────────────────────────────────────
-@app.get("/")
-def index():
-    return FileResponse(STATIC / "index.html")
-
-
-@app.get("/api/status")
+@router.get("/status")
 def status():
     return {"engine": engine.status(), "market_open": is_market_open(cfg), "ist": now_ist().strftime("%d %b %Y %H:%M"),
             "demo": demo.enabled() or prices.any_demo(), "universe": len(SYMBOLS),
@@ -84,7 +62,7 @@ def status():
 
 
 # ── desk 1: news intelligence ──────────────────────────────────
-@app.get("/api/news")
+@router.get("/news")
 def news(limit: int = 80, symbol: str | None = None):
     items = list(engine.items)
     if symbol:
@@ -92,13 +70,13 @@ def news(limit: int = 80, symbol: str | None = None):
     return sorted(items, key=lambda r: -r["ts"])[:limit]
 
 
-@app.get("/api/insights")
+@router.get("/insights")
 def insights():
     order = {"BUY": 0, "SELL": 1, "WATCH": 2, "AVOID": 3, "HOLD": 4}
     return sorted(engine.insights.values(), key=lambda r: (order[r["action"]], -r["news_count"], -abs(r["score"])))
 
 
-@app.get("/api/stream")
+@router.get("/stream")
 async def stream():
     q: asyncio.Queue = asyncio.Queue(maxsize=500)
     loop = asyncio.get_running_loop()
@@ -123,7 +101,7 @@ async def stream():
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
-@app.get("/api/stock/{symbol}")
+@router.get("/stock/{symbol}")
 def stock(symbol: str, bars: int = 200):
     s = _sym(symbol)
     df, is_demo = prices.get(s)
@@ -134,7 +112,7 @@ def stock(symbol: str, bars: int = 200):
 
 
 # ── desk 2: NIFTY 50 patterns ──────────────────────────────────
-@app.get("/api/patterns")
+@router.get("/patterns")
 def patterns(refresh: bool = False):
     if refresh or time.time() - _pattern_cache["at"] > 900 or not _pattern_cache["rows"]:
         prices.load(SYMBOLS)
@@ -160,7 +138,7 @@ def patterns(refresh: bool = False):
 
 
 # ── desk 3: algo lab ───────────────────────────────────────────
-@app.get("/api/strategies")
+@router.get("/strategies")
 def strategies():
     return algo.catalog()
 
@@ -179,7 +157,7 @@ def _history(symbol: str, years: float) -> pd.DataFrame:
     return prices.history(_sym(symbol), years)[0]
 
 
-@app.post("/api/backtest")
+@router.post("/backtest")
 def backtest(req: BacktestReq):
     if req.strategy not in algo.STRATEGIES:
         raise HTTPException(400, "Unknown strategy")
@@ -190,11 +168,6 @@ def backtest(req: BacktestReq):
     return res
 
 
-@app.post("/api/compare")
+@router.post("/compare")
 def compare(req: BacktestReq):
     return algo.compare(_history(req.symbol, req.years), req.cash, req.commission)
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

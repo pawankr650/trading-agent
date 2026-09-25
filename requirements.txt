@@ -1,21 +1,22 @@
-# core (both systems)
+# core (all systems)
 pandas>=2.2
 numpy>=1.26
 requests>=2.31
 pyyaml>=6.0
 python-dotenv>=1.0
 matplotlib>=3.8
-yfinance>=0.2.50
-scipy>=1.11                # swing-pivot detection for chart patterns
+yfinance>=0.2.60        # older versions fail with "Invalid Crumb" (HTTP 401) from Yahoo
+scipy>=1.11             # swing-pivot detection for chart patterns
 
-# web app (one-page terminal: news intelligence · pattern scanner · algo lab)
-fastapi>=0.110
-uvicorn[standard]>=0.29
-TA-Lib>=0.6                # 61 candlestick recognisers (0.6+ ships binary wheels, no C build)
-backtesting>=0.6           # kernc/backtesting.py — strategy simulation + optimisation
-huggingface_hub>=0.24      # HF Inference API for FinBERT / zero-shot (set HF_TOKEN)
+# web app backend (python -m server.app)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27             # used by the API tests (fastapi.testclient)
+TA-Lib>=0.6             # 61 candlestick recognisers (0.6+ ships binary wheels, no C build)
+backtesting>=0.6        # kernc/backtesting.py — Algo Lab simulations + optimiser
+huggingface_hub>=0.24   # HF Inference API for FinBERT sentiment + zero-shot event typing
 
-# run the Hugging Face models locally instead of the API (heavier, optional):
+# run the Hugging Face news models locally instead of the API (heavier, optional):
 #   pip install transformers torch --extra-index-url https://download.pytorch.org/whl/cpu
 
 # live data / live trading through 30+ Indian brokers (optional)

@@ -1,6 +1,7 @@
 """Config + environment loading shared by both systems."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -26,11 +27,26 @@ def _load_dotenv() -> None:
                     os.environ.setdefault(k.strip(), v.strip())
 
 
-def load_config(path: str | Path | None = None) -> dict:
+OVERRIDES = DATA_DIR / "overrides.json"  # settings changed from the web app (keeps config.yaml comments intact)
+
+
+def load_config(path: str | Path | None = None, overrides: bool = True) -> dict:
     _load_dotenv()
     path = Path(path or os.getenv("STOCKPILOT_CONFIG", ROOT / "config.yaml"))
     with open(path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    if overrides and OVERRIDES.exists():
+        try:
+            cfg.update(json.loads(OVERRIDES.read_text()))
+        except ValueError:
+            logging.getLogger(__name__).warning("ignoring corrupt %s", OVERRIDES)
+    return cfg
+
+
+def save_override(key: str, value) -> None:
+    data = json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else {}
+    data[key] = value
+    OVERRIDES.write_text(json.dumps(data, indent=1))
 
 
 def setup_logging(name: str) -> logging.Logger:
